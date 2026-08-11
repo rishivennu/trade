@@ -1,0 +1,17 @@
+{
+  "name": "trading-terminal",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "cd client && npm install && npm run build"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  },
+  "description": "Trading Analysis Terminal - charts, backtesting, optimisation, portfolio and forward testing",
+  "engines": {
+    "node": ">=20"
+  }
+}
