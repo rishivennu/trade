@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createChart, ColorType, CrosshairMode } from "lightweight-charts";
 import { Play, Pause, SkipBack, StepForward, StepBack, Rewind } from "lucide-react";
+import { DrawingLayer, useSymbolDrawings } from "./DrawingTools.jsx";
 
 const inr = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
 const inrSigned = (n) => n == null ? "—" : (n >= 0 ? "+" : "−") + "₹" + Math.abs(Math.round(n)).toLocaleString("en-IN");
 const SPEEDS = [0.5, 1, 2, 4, 8];
 
 // TradingView-style bar replay. Self-contained: owns playhead, play/pause, speed.
-export default function ReplayPlayer({ replay, theme }) {
+export default function ReplayPlayer({ replay, theme, symbol }) {
   const { candles, startIdx, emaFast, emaSlow, trail, center, trades, equity } = replay;
   const n = candles.length;
   const [idx, setIdx] = useState(startIdx);       // current (last visible) bar
@@ -16,7 +17,10 @@ export default function ReplayPlayer({ replay, theme }) {
 
   const ref = useRef(null);
   const chartRef = useRef(null);
+  const seriesRef = useRef(null);
   const sRef = useRef({});
+  const drawOverlayRef = useRef(() => {});
+  const [drawings, setDrawings] = useSymbolDrawings(symbol);
 
   // reset when a new replay dataset arrives
   useEffect(() => { setIdx(startIdx); setPlaying(false); }, [replay, startIdx]);
@@ -53,6 +57,7 @@ export default function ReplayPlayer({ replay, theme }) {
     });
     chartRef.current = chart;
     const candle = chart.addCandlestickSeries({ upColor: "#16d19b", downColor: "#ff5c6c", borderUpColor: "#16d19b", borderDownColor: "#ff5c6c", wickUpColor: "#16d19b", wickDownColor: "#ff5c6c" });
+    seriesRef.current = candle;
     const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol" });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
     const mkLine = (color, w, style) => chart.addLineSeries({ color, lineWidth: w, lineStyle: style, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
@@ -62,9 +67,12 @@ export default function ReplayPlayer({ replay, theme }) {
     const tr = trail ? chart.addLineSeries({ color: "#16d19b", lineWidth: 2, lineType: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }) : null;
     const ct = center ? mkLine("#5aa9ff", 1, 2) : null;
     sRef.current = { candle, vol, eF, eS, tr, ct, drawnTo: -1 };
-    const resize = () => ref.current && chart.applyOptions({ width: ref.current.clientWidth, height: ref.current.clientHeight });
+    const redraw = () => drawOverlayRef.current();
+    const resize = () => { if (ref.current) { chart.applyOptions({ width: ref.current.clientWidth, height: ref.current.clientHeight }); redraw(); } };
     window.addEventListener("resize", resize);
-    return () => { window.removeEventListener("resize", resize); chart.remove(); chartRef.current = null; sRef.current = {}; };
+    chart.timeScale().subscribeVisibleTimeRangeChange(redraw);
+    requestAnimationFrame(redraw);
+    return () => { window.removeEventListener("resize", resize); chart.remove(); chartRef.current = null; seriesRef.current = null; sRef.current = {}; };
   }, [replay, theme]);
 
   // push data up to idx whenever it changes
@@ -80,6 +88,7 @@ export default function ReplayPlayer({ replay, theme }) {
     if (s.ct) s.ct.setData(slice.map((c, i) => center[i] != null ? { time: c.time, value: center[i] } : null).filter(Boolean));
     s.candle.setMarkers(allMarkers.filter(m => m.idx <= idx).map(m => ({ time: m.time, position: m.position, color: m.color, shape: m.shape, text: m.text })));
     chartRef.current?.timeScale().setVisibleLogicalRange({ from: Math.max(0, hi - 140), to: hi + 3 });
+    drawOverlayRef.current();
   }, [idx, candles, emaFast, emaSlow, trail, center, allMarkers]);
 
   // autoplay
@@ -117,7 +126,14 @@ export default function ReplayPlayer({ replay, theme }) {
         <div className="rk"><span className="rk-l">Equity</span><span className="rk-v mono">{eqPoint ? inr(eqPoint.equity) : "—"}</span></div>
       </div>
 
-      <div className="replay-chart" ref={ref} />
+      <div className="replay-chart">
+        <div ref={ref} style={{ width: "100%", height: "100%" }} />
+        <DrawingLayer
+          chartRef={chartRef} seriesRef={seriesRef} hostRef={ref}
+          drawings={drawings} setDrawings={setDrawings}
+          registerRedraw={(fn) => { drawOverlayRef.current = fn; fn(); }}
+        />
+      </div>
 
       <div className="replay-transport">
         <button className="rbtn" onClick={() => { setPlaying(false); setIdx(startIdx); }} title="Restart"><SkipBack size={16} /></button>

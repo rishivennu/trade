@@ -21,7 +21,7 @@ import {
   ArrowUpRight, ArrowDownRight, Activity, Target, Layers, Clock,
   BarChart3, Wallet, Percent, Award, DollarSign, Bot, Sparkles,
   FlaskConical, Play, TrendingDown, Gauge, Code2, Sun, Moon, Shield, Grid3x3, Dices,
-  Keyboard,
+  Keyboard, Menu,
 } from "lucide-react";
 import "./index.css";
 
@@ -300,6 +300,7 @@ function Terminal() {
     useTargets: false, tp1R: 1, tp1Pct: 40, tp2R: 2, tp2Pct: 30, tp3R: 3, tp3Pct: 30, beAfterTp1: true,
   });
   const [showKbd, setShowKbd] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const toast = useToast();
   const [execOpen, setExecOpen] = useState(false);
   const [robustRes, setRobustRes] = useState(null);
@@ -528,7 +529,7 @@ function Terminal() {
   useEffect(() => {
     const onKey = e => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "Escape") { setDrawer(false); setShowKbd(false); return; }
+      if (e.key === "Escape") { setDrawer(false); setShowKbd(false); setSidebarOpen(false); return; }
       if (isTyping()) return;
 
       if (e.key === "?" || (e.key === "/" && e.shiftKey)) { e.preventDefault(); setShowKbd(v => !v); return; }
@@ -570,6 +571,10 @@ function Terminal() {
       <a className="skip-link" href="#view-panel">Skip to main content</a>
       <header className="hdr">
         <div className="hdr-left">
+          <button type="button" className="bell menu-btn" onClick={() => setSidebarOpen(v => !v)}
+            aria-label={sidebarOpen ? "Close instrument menu" : "Open instrument menu"} aria-expanded={sidebarOpen} aria-controls="sidebar-drawer">
+            <Menu size={18} aria-hidden="true" />
+          </button>
           <h1 className="logo"><span className="logo-mark" aria-hidden="true"><TrendingUp size={17} aria-hidden="true" /></span> Trading Terminal</h1>
           <span className="pill">PAPER · LIVE</span>
         </div>
@@ -601,7 +606,8 @@ function Terminal() {
       </header>
 
       <div className="layout">
-        <aside className="sidebar" aria-label="Instrument watchlist and search">
+        {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-hidden="true" />}
+        <aside id="sidebar-drawer" className={`sidebar ${sidebarOpen ? "open" : ""}`} aria-label="Instrument watchlist and search">
           <div className="search-box">
             <input ref={searchRef} id="wl-search" type="search" className="input" style={{ width: "100%" }}
               placeholder="Search F&O instruments…" aria-label="Search F&O instruments (press / to focus)"
@@ -615,7 +621,7 @@ function Terminal() {
                   const iq = quotes[i.symbol];
                   return (
                     <button key={i.symbol} type="button" role="option" aria-selected={symbol === i.symbol}
-                      className={`wl-item ${symbol === i.symbol ? "active" : ""}`} onClick={() => setSymbol(i.symbol)}>
+                      className={`wl-item ${symbol === i.symbol ? "active" : ""}`} onClick={() => { setSymbol(i.symbol); setSidebarOpen(false); }}>
                       <div className="wl-name">
                         <span className="nm">{i.name}</span>
                         <span className="tk">{i.symbol.replace(".NS", "")}</span>
@@ -726,7 +732,7 @@ function Terminal() {
               {tab === "chart" && (
                 <>
                   <div className="chart-wrap">
-                    {data ? <Chart data={data} showICT={strategy === "ict"} livePrice={isLiveSym ? livePx : null} theme={theme} /> : <div className="loading" role="status" aria-live="polite">{loading ? "Loading market data…" : "Select an instrument"}</div>}
+                    {data ? <Chart data={data} showICT={strategy === "ict"} livePrice={isLiveSym ? livePx : null} theme={theme} symbol={symbol} /> : <div className="loading" role="status" aria-live="polite">{loading ? "Loading market data…" : "Select an instrument"}</div>}
                   </div>
                   {data && (
                     <div className="trade-bar">
@@ -742,7 +748,7 @@ function Terminal() {
 
               {tab === "backtest" && (
                 <BacktestView cfg={btCfg} setCfg={setBtCfg} result={btResult} loading={btLoading}
-                  onRun={runBt} symbol={curName} interval={interval} range={range}
+                  onRun={runBt} symbol={curName} rawSymbol={symbol} interval={interval} range={range}
                   strategy={btStrategy} setStrategy={setBtStrategy}
                   formula={btFormula} setFormula={setBtFormula}
                   strategyName={(STRATEGIES.find(x => x.id === btStrategy) || {}).name}
@@ -1111,7 +1117,7 @@ function PerformanceView({ stats, onRefresh }) {
 }
 
 
-function BacktestView({ cfg, setCfg, result, loading, onRun, symbol, strategy, setStrategy, formula, setFormula, interval, range, strategyName, mode, setMode, pine, setPine, view, setView, theme, execOpen, setExecOpen, robustRes, robustBusy, robustErr, onRunRobust }) {
+function BacktestView({ cfg, setCfg, result, loading, onRun, symbol, rawSymbol, strategy, setStrategy, formula, setFormula, interval, range, strategyName, mode, setMode, pine, setPine, view, setView, theme, execOpen, setExecOpen, robustRes, robustBusy, robustErr, onRunRobust }) {
   const set = (k, v) => setCfg(c => ({ ...c, [k]: v }));
   const m = result?.metrics;
   const pf = ratio;
@@ -1233,7 +1239,7 @@ function BacktestView({ cfg, setCfg, result, loading, onRun, symbol, strategy, s
           </div>
 
           {view === "replay" && result.replay
-            ? <ReplayPlayer replay={result.replay} theme={theme} />
+            ? <ReplayPlayer replay={result.replay} theme={theme} symbol={rawSymbol} />
             : view === "analytics"
             ? <div className="bt-analytics">
                 <RiskMetrics m={m} meta={result.meta} />

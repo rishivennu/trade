@@ -1,10 +1,17 @@
 import { useEffect, useRef } from "react";
 import { createChart, CrosshairMode, ColorType } from "lightweight-charts";
+import { DrawingLayer, useSymbolDrawings } from "./DrawingTools.jsx";
 
-export default function Chart({ data, showICT, livePrice, theme }) {
+export default function Chart({ data, showICT, livePrice, theme, symbol }) {
   const ref = useRef(null);
   const chartRef = useRef(null);
+  const seriesRef = useRef(null);
+  const drawOverlayRef = useRef(() => {});
 
+  const [drawings, setDrawings] = useSymbolDrawings(symbol);
+
+  // ── Chart creation (unchanged behaviour) + wires the overlay redraw into
+  //    the chart's own lifecycle so it never points at a destroyed chart. ──
   useEffect(() => {
     if (!ref.current || !data?.candles?.length) return;
     if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
@@ -28,6 +35,7 @@ export default function Chart({ data, showICT, livePrice, theme }) {
       upColor: "#16d19b", downColor: "#ff5c6c", borderUpColor: "#16d19b",
       borderDownColor: "#ff5c6c", wickUpColor: "#16d19b", wickDownColor: "#ff5c6c",
     });
+    seriesRef.current = candle;
     candle.setData(data.candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
 
     const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol" });
@@ -43,7 +51,6 @@ export default function Chart({ data, showICT, livePrice, theme }) {
     };
 
     if (showICT && data.ict && !data.ict.error) {
-      // Active order block zones as filled bands (proximal + distal price lines)
       const ict = data.ict;
       if (ict.activeDemand) {
         candle.createPriceLine({ price: ict.activeDemand.proximal, color: "#16d19b", lineWidth: 1, lineStyle: 0, title: "Demand ▲" });
@@ -53,14 +60,12 @@ export default function Chart({ data, showICT, livePrice, theme }) {
         candle.createPriceLine({ price: ict.activeSupply.proximal, color: "#ff5c6c", lineWidth: 1, lineStyle: 0, title: "Supply ▼" });
         candle.createPriceLine({ price: ict.activeSupply.distal, color: "rgba(255,92,108,.5)", lineWidth: 1, lineStyle: 2, title: "" });
       }
-      // Markers: BoS events + signal
       const markers = [];
       for (const b of (ict.bosEvents || [])) {
         markers.push({ time: b.time, position: b.type === "Bull BoS" ? "belowBar" : "aboveBar",
           color: b.type === "Bull BoS" ? "#16d19b" : "#ff5c6c", shape: b.type === "Bull BoS" ? "arrowUp" : "arrowDown",
           text: b.type === "Bull BoS" ? "BoS↑" : "BoS↓" });
       }
-      // dedupe by time, keep last
       const seen = new Set(); const uniq = [];
       for (const m of markers.reverse()) { if (!seen.has(m.time)) { seen.add(m.time); uniq.push(m); } }
       uniq.reverse();
@@ -68,7 +73,6 @@ export default function Chart({ data, showICT, livePrice, theme }) {
     } else if (data.indicators) {
       const { emaFast, emaSlow, bbUpper, bbLower, vwap, ppTrail, ppCenter, ppTrend } = data.indicators;
       if (ppTrail) {
-        // Pivot SuperTrend: split the trail into green (up) / red (down) runs so the flip is visible
         const up = ppTrail.map((v, i) => ppTrend?.[i] === 1 ? v : null);
         const dn = ppTrail.map((v, i) => ppTrend?.[i] === -1 ? v : null);
         line(up, "#16d19b", 2, 0, "PP Trail ↑");
@@ -87,10 +91,24 @@ export default function Chart({ data, showICT, livePrice, theme }) {
       candle.createPriceLine({ price: livePrice, color: "#c6f24e", lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: "LIVE" });
     }
     chart.timeScale().fitContent();
-    const resize = () => ref.current && chart.applyOptions({ width: ref.current.clientWidth, height: ref.current.clientHeight });
+
+    const redraw = () => drawOverlayRef.current();
+    const resize = () => { if (ref.current) { chart.applyOptions({ width: ref.current.clientWidth, height: ref.current.clientHeight }); redraw(); } };
     window.addEventListener("resize", resize);
-    return () => { window.removeEventListener("resize", resize); chart.remove(); chartRef.current = null; };
+    chart.timeScale().subscribeVisibleTimeRangeChange(redraw);
+    requestAnimationFrame(redraw);
+
+    return () => { window.removeEventListener("resize", resize); chart.remove(); chartRef.current = null; seriesRef.current = null; };
   }, [data, showICT, livePrice, theme]);
 
-  return <div ref={ref} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+      <div ref={ref} style={{ width: "100%", height: "100%" }} />
+      <DrawingLayer
+        chartRef={chartRef} seriesRef={seriesRef} hostRef={ref}
+        drawings={drawings} setDrawings={setDrawings}
+        registerRedraw={(fn) => { drawOverlayRef.current = fn; fn(); }}
+      />
+    </div>
+  );
 }

@@ -122,6 +122,7 @@ button { font-family: inherit; }
 .logo-mark { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), #8fd400); display: grid; place-items: center; color: var(--accent-ink); }
 .pill { background: var(--accent-dim); color: var(--accent); padding: 4px 10px; border-radius: 100px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.4px; }
 .hdr-right { display: flex; align-items: center; gap: 12px; }
+.menu-btn { display: none; }
 .price-ticker { display: flex; align-items: baseline; gap: 9px; }
 .price-ticker .sym { font-size: 12px; color: var(--tx-2); font-weight: 500; }
 .price-ticker .px { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
@@ -132,8 +133,29 @@ button { font-family: inherit; }
 .bell .badge { position: absolute; top: -6px; right: -6px; background: var(--danger-solid); color: #fff; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 100px; display: grid; place-items: center; padding: 0 4px; }
 
 /* Layout */
-.layout { display: flex; flex: 1; overflow: hidden; }
+.layout { display: flex; flex: 1; overflow: hidden; position: relative; }
 .sidebar { width: 268px; background: var(--bg-1); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+.sidebar-backdrop { display: none; }
+
+/* ── Mobile (<=860px): header wraps, sidebar becomes an off-canvas drawer ── */
+@media (max-width: 860px) {
+  .hdr { flex-wrap: wrap; height: auto; min-height: 58px; padding: 10px 12px; row-gap: 8px; }
+  .hdr-right { width: 100%; flex-wrap: wrap; gap: 8px 10px; }
+  .menu-btn { display: grid; }
+  .layout { overflow: visible; }
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 70;
+    width: min(85vw, 300px); max-width: 300px;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: 16px 0 40px -12px rgba(0,0,0,.5);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 65;
+    background: rgba(0,0,0,.55);
+  }
+}
 .search-box { padding: 14px; border-bottom: 1px solid var(--border); }
 .watchlist { flex: 1; overflow-y: auto; }
 .wl-group { padding: 12px 16px 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--tx-3); letter-spacing: 0.7px; position: sticky; top: 0; background: var(--bg-1); z-index: 1; }
@@ -367,7 +389,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .rk-l { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--tx-3); }
 .rk-v { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.replay-chart { height: 440px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.replay-chart { position: relative; height: 440px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
 
 .replay-transport { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 14px; }
 .rbtn { width: 38px; height: 38px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-2); color: var(--tx); display: grid; place-items: center; cursor: pointer; transition: all .12s; flex-shrink: 0; }
@@ -675,12 +697,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
-/* ── Sticky sub-tab bars so controls stay reachable while scrolling ────── */
-.bt-view-tabs {
-  position: sticky; top: 0; z-index: 20;
-  background: var(--bg); padding: 8px 0; margin-bottom: 0;
-  overflow-x: auto; scrollbar-width: none;
-}
+/* ── Sub-tab bar: horizontally scrollable on narrow widths, not sticky ──
+   (sticky here fought the nested scroll container and rendered the row
+   collapsed on top of the metric cards below it — not worth the bug) */
+.bt-view-tabs { overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
 .bt-view-tabs::-webkit-scrollbar { height: 0; }
 .bt-vtab { flex-shrink: 0; }
 
@@ -739,3 +759,71 @@ kbd {
 
 /* Scrollable table regions are focusable so they can be scrolled from the keyboard */
 .tbl-wrap[tabindex="0"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---------- Chart drawing toolbar ---------- */
+.chart-overlay { position: absolute; inset: 0; z-index: 5; }
+
+.chart-dtools {
+  position: absolute; top: 10px; left: 10px; z-index: 10;
+  display: flex; align-items: center; gap: 4px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px; box-shadow: var(--shadow);
+}
+.dtool-btn {
+  position: relative; width: 30px; height: 30px; display: grid; place-items: center;
+  border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--tx-2);
+  cursor: pointer; transition: all .15s;
+}
+.dtool-btn:hover { background: var(--card-hover); color: var(--tx); }
+.dtool-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-2-dim); }
+.dtool-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dtool-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+.dtool-count {
+  position: absolute; top: -5px; right: -5px; background: var(--accent-2); color: #fff;
+  font-size: 9px; font-weight: 800; min-width: 15px; height: 15px; border-radius: 100px;
+  display: grid; place-items: center; padding: 0 3px; font-variant-numeric: tabular-nums;
+}
+
+.dtool-list {
+  position: absolute; top: 52px; left: 10px; z-index: 10; width: min(260px, calc(100% - 20px));
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow); padding: 8px; max-height: min(320px, calc(100% - 62px)); overflow-y: auto;
+}
+.dtool-list-h {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 12px; font-weight: 700; color: var(--tx); padding: 2px 4px 8px;
+}
+.dtool-empty { font-size: 12px; color: var(--tx-2); line-height: 1.5; padding: 4px; }
+.dtool-items { display: flex; flex-direction: column; gap: 2px; margin: 0 0 6px; padding: 0; list-style: none; }
+.dtool-items li { display: flex; align-items: center; gap: 4px; border-radius: 7px; }
+.dtool-items li.sel { background: var(--accent-dim); }
+.dtool-item-name {
+  flex: 1; text-align: left; background: transparent; border: none; color: var(--tx-2);
+  font-size: 12.5px; padding: 6px 7px; border-radius: 6px; cursor: pointer;
+}
+.dtool-items li.sel .dtool-item-name { color: var(--accent); font-weight: 600; }
+.dtool-item-name:hover { color: var(--tx); }
+.dtool-x {
+  width: 26px; height: 26px; flex-shrink: 0; display: grid; place-items: center;
+  border: none; background: transparent; color: var(--tx-3); border-radius: 6px; cursor: pointer;
+}
+.dtool-x:hover { background: var(--red-bg); color: var(--red); }
+.dtool-clear {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px; border-radius: 7px; border: 1px solid var(--border); background: transparent;
+  color: var(--tx-2); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.dtool-clear:hover { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+.dtool-btn:focus-visible, .dtool-item-name:focus-visible, .dtool-x:focus-visible, .dtool-clear:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+
+@media (pointer: coarse) {
+  .dtool-btn { width: 40px; height: 40px; }
+  .dtool-x { width: 34px; height: 34px; }
+}
+@media (max-width: 860px) {
+  .chart-dtools { top: 6px; left: 6px; padding: 3px; gap: 2px; }
+  .dtool-btn { width: 34px; height: 34px; }
+  .dtool-list { top: 46px; left: 6px; width: min(240px, calc(100% - 12px)); }
+}
